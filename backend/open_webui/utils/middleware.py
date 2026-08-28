@@ -1758,6 +1758,135 @@ async def chat_image_generation_handler(request: Request, form_data: dict, extra
     return form_data
 
 
+def get_files_from_messages(message_list):
+    files = []
+    for message in reversed(message_list):
+        for file in message.get('files', []):
+            if file.get('type') == 'file' and file.get('url'):
+                files.append(file)
+    return files
+
+
+async def chat_document_translation_handler(request: Request, form_data: dict, extra_params: dict, user):
+    """
+    Legacy function-calling doesn't offer the model a `translate_document` tool
+    to call on its own (builtin tools are native-FC only, see get_builtin_tools).
+    Instead this forces translation of any attached docx/pptx/xlsx whenever
+    the user has the "Translate document" feature toggled on for the message,
+    mirroring how chat_image_generation_handler/chat_web_search_handler work.
+    """
+    from open_webui.utils.document_translation import TRANSLATORS, persist_translated_file
+
+    metadata = extra_params.get('__metadata__', {})
+    chat_id = metadata.get('chat_id', None)
+    __event_emitter__ = extra_params.get('__event_emitter__', None)
+
+    if not chat_id or not isinstance(chat_id, str) or not __event_emitter__:
+        return form_data
+
+    if chat_id.startswith('local:') or chat_id.startswith('channel:'):
+        message_list = form_data.get('messages', [])
+    else:
+        chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id)
+        if not chat:
+            return form_data
+        messages_map = chat.chat.get('history', {}).get('messages', {})
+        message_id = chat.chat.get('history', {}).get('currentId')
+        message_list = get_message_list(messages_map, message_id)
+
+    user_message = get_last_user_message(message_list)
+
+    attached_files = get_files_from_messages(message_list)
+    translatable = []
+    for file in attached_files:
+        extension = os.path.splitext(file.get('name', ''))[1][1:].lower()
+        if extension in TRANSLATORS:
+            translatable.append((file, extension))
+        if len(translatable) >= 2:  # keep it to the most recently attached document(s)
+            break
+
+    if not translatable:
+        return form_data
+
+    await __event_emitter__(
+        {
+            'type': 'status',
+            'data': {'description': 'Translating document', 'done': False},
+        }
+    )
+
+    from open_webui.models.files import Files
+    from open_webui.storage.provider import Storage
+
+    model_id = form_data.get('model')
+    translated_names = []
+    result_files = []
+    any_partial = False
+
+    for file, extension in translatable:
+        try:
+            file_record = await Files.get_file_by_id(file['url'])
+            if not file_record:
+                continue
+
+            source_path = Storage.get_file(file_record.path)
+            translated_bytes, had_failures = await TRANSLATORS[extension](
+                source_path, user_message, request, model_id, user
+            )
+            any_partial = any_partial or had_failures
+            new_file_entry = await persist_translated_file(user, file_record.filename, extension, translated_bytes)
+            result_files.append(new_file_entry)
+            translated_names.append(new_file_entry['name'])
+        except Exception as e:
+            log.exception(f'chat_document_translation_handler error: {e}')
+
+    if not result_files:
+        await __event_emitter__(
+            {
+                'type': 'status',
+                'data': {'description': 'Document translation failed', 'done': True},
+            }
+        )
+        return form_data
+
+    await __event_emitter__(
+        {
+            'type': 'status',
+            'data': {'description': 'Document translated', 'done': True},
+        }
+    )
+
+    if not (chat_id.startswith('local:') or chat_id.startswith('channel:')):
+        message_id = metadata.get('message_id')
+        if message_id:
+            db_files = await Chats.add_message_files_by_id_and_message_id(chat_id, message_id, result_files)
+            if db_files is not None:
+                result_files = db_files
+
+    await __event_emitter__(
+        {
+            'type': 'chat:message:files',
+            'data': {'files': result_files},
+        }
+    )
+
+    quoted_names = ', '.join(f'"{n}"' for n in translated_names)
+    partial_warning = (
+        ' Some parts of the document could not be translated due to server load and were kept in the original '
+        'language — let the user know this in your reply.'
+        if any_partial
+        else ''
+    )
+    system_message_content = (
+        f'<context>The translated document(s) {quoted_names} have been generated and are already visible to '
+        'the user in the chat as downloadable files. Let them know the translation is ready — do not re-embed '
+        f'or repeat the file contents.{partial_warning}</context>'
+    )
+    form_data['messages'] = add_or_update_system_message(system_message_content, form_data['messages'])
+
+    return form_data
+
+
 async def chat_completion_files_handler(
     request: Request, body: dict, extra_params: dict, user: UserModel
 ) -> tuple[dict, dict[str, list]]:
@@ -2462,6 +2591,11 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             # Skip forced image generation when native FC is enabled - model can use generate_image tool
             if metadata.get('params', {}).get('function_calling') == 'legacy':
                 form_data = await chat_image_generation_handler(request, form_data, extra_params, user)
+
+        if 'document_translation' in features and features['document_translation']:
+            # Skip forced document translation when native FC is enabled - model can use translate_document tool
+            if metadata.get('params', {}).get('function_calling') == 'legacy':
+                form_data = await chat_document_translation_handler(request, form_data, extra_params, user)
 
         if 'code_interpreter' in features and features['code_interpreter']:
             engine = await Config.get('code_interpreter.engine', 'pyodide')
@@ -5108,6 +5242,7 @@ async def streaming_chat_response_handler(response, ctx):
                                             else None
                                         ),
                                         await Config.get('code_interpreter.jupyter.timeout'),
+                                        user=user,
                                     )
                                 else:
                                     ci_output = {'stdout': 'Code interpreter engine not configured.'}

@@ -63,6 +63,7 @@ async def execute_code(request: Request, form_data: CodeForm, user=Depends(get_v
                 else None
             ),
             await Config.get('code_execution.jupyter.timeout'),
+            user=user,
         )
 
         return output

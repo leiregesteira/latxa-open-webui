@@ -14,7 +14,9 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import ChartLine from './ChartLine.svelte';
 	import AnalyticsModelModal from './AnalyticsModelModal.svelte';
+	import PricingModal from './PricingModal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import Cog6 from '$lib/components/icons/Cog6.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import { formatNumber } from '$lib/utils';
 	import { goto } from '$app/navigation';
@@ -80,15 +82,17 @@
 	let dailyStats: Array<{ date: string; models: Record<string, number> }> = [];
 	let tokenStats: Record<
 		string,
-		{ input_tokens: number; output_tokens: number; total_tokens: number }
+		{ input_tokens: number; output_tokens: number; total_tokens: number; cost: number }
 	> = {};
 	let totalTokens = { input: 0, output: 0, total: 0 };
+	let totalCost = 0;
 
 	let loading = true;
 
 	// Selected model for drill-down
 	let selectedModel: { id: string; name: string } | null = null;
 	let showModelModal = false;
+	let showPricingModal = false;
 
 	// Sorting
 	let modelOrderBy = 'count';
@@ -145,7 +149,8 @@
 					tokenStats[m.model_id] = {
 						input_tokens: m.input_tokens,
 						output_tokens: m.output_tokens,
-						total_tokens: m.total_tokens
+						total_tokens: m.total_tokens,
+						cost: m.cost ?? 0
 					};
 				}
 				totalTokens = {
@@ -153,6 +158,7 @@
 					output: tokensRes.total_output_tokens,
 					total: tokensRes.total_tokens
 				};
+				totalCost = tokensRes.total_cost ?? 0;
 			}
 		} catch (err) {
 			console.error('Dashboard load failed:', err);
@@ -188,6 +194,11 @@
 			const aTokens = tokenStats[a.model_id]?.total_tokens ?? 0;
 			const bTokens = tokenStats[b.model_id]?.total_tokens ?? 0;
 			return modelDirection === 'asc' ? aTokens - bTokens : bTokens - aTokens;
+		}
+		if (modelOrderBy === 'cost') {
+			const aCost = tokenStats[a.model_id]?.cost ?? 0;
+			const bCost = tokenStats[b.model_id]?.cost ?? 0;
+			return modelDirection === 'asc' ? aCost - bCost : bCost - aCost;
 		}
 		if (modelOrderBy === 'users') {
 			const aUsers = a.unique_users ?? 0;
@@ -272,6 +283,14 @@
 				<option value={period.value}>{period.label}</option>
 			{/each}
 		</select>
+		<Tooltip content={$i18n.t('Configure token pricing')}>
+			<button
+				class="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
+				on:click={() => (showPricingModal = true)}
+			>
+				<Cog6 className="size-4" />
+			</button>
+		</Tooltip>
 	</div>
 </div>
 
@@ -282,6 +301,9 @@
 	startDate={getDateRange(selectedPeriod).start}
 	endDate={getDateRange(selectedPeriod).end}
 />
+
+<!-- Pricing Config Modal -->
+<PricingModal bind:show={showPricingModal} onSave={loadDashboard} />
 
 <!-- Summary stats -->
 {#if !loading}
@@ -300,6 +322,20 @@
 				{$i18n.t('tokens')}</span
 			>
 		</Tooltip>
+		{#if totalCost > 0}
+			<Tooltip
+				content={$i18n.t(
+					'Estimated cost based on token counts and the pricing configured per model'
+				)}
+			>
+				<span class="cursor-help"
+					><span class="font-medium text-gray-900 dark:text-gray-300"
+						>${totalCost.toFixed(2)}</span
+					>
+					{$i18n.t('est. cost')}</span
+				>
+			</Tooltip>
+		{/if}
 		<span
 			><span class="font-medium text-gray-900 dark:text-gray-300"
 				>{summary.total_chats.toLocaleString()}</span
@@ -450,6 +486,24 @@
 							</th>
 							<th
 								scope="col"
+								class="px-2.5 py-2 cursor-pointer select-none text-right"
+								on:click={() => toggleModelSort('cost')}
+							>
+								<div class="flex gap-1.5 items-center justify-end">
+									{$i18n.t('Cost')}
+									{#if modelOrderBy === 'cost'}
+										<span class="font-normal">
+											{#if modelDirection === 'asc'}<ChevronUp
+													className="size-2"
+												/>{:else}<ChevronDown className="size-2" />{/if}
+										</span>
+									{:else}
+										<span class="invisible"><ChevronUp className="size-2" /></span>
+									{/if}
+								</div>
+							</th>
+							<th
+								scope="col"
 								class="px-2.5 py-2 cursor-pointer select-none text-right w-16"
 								on:click={() => toggleModelSort('percentage')}
 							>
@@ -497,6 +551,13 @@
 								<td class="px-3 py-1 text-right"
 									>{formatNumber(tokenStats[model.model_id]?.total_tokens ?? 0)}</td
 								>
+								<td class="px-3 py-1 text-right">
+									{#if (tokenStats[model.model_id]?.cost ?? 0) > 0}
+										${tokenStats[model.model_id].cost.toFixed(2)}
+									{:else}
+										<span class="text-gray-300 dark:text-gray-600">—</span>
+									{/if}
+								</td>
 								<td class="px-3 py-1 text-right text-gray-400">
 									{totalModelMessages > 0
 										? ((model.count / totalModelMessages) * 100).toFixed(1)
@@ -506,7 +567,7 @@
 						{/each}
 						{#if sortedModels.length === 0}
 							<tr
-								><td colspan="7" class="px-3 py-2 text-center text-gray-400"
+								><td colspan="8" class="px-3 py-2 text-center text-gray-400"
 									>{$i18n.t('No data')}</td
 								></tr
 							>

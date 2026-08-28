@@ -162,6 +162,7 @@
 	let imageGenerationEnabled = false;
 	let webSearchEnabled = false;
 	let codeInterpreterEnabled = false;
+	let documentTranslationEnabled = false;
 	let webSearchActive = false;
 	let showWebSearchConfirm = false;
 	let pendingWebSearchPrompt: string | null = null;
@@ -264,6 +265,7 @@
 		selectedFilterIds = [];
 		webSearchEnabled = false;
 		imageGenerationEnabled = false;
+		documentTranslationEnabled = false;
 
 		const storageChatInput = sessionStorage.getItem(
 			`chat-input${chatIdProp ? `-${chatIdProp}` : ''}`
@@ -301,6 +303,7 @@
 						webSearchEnabled = input.webSearchEnabled;
 						imageGenerationEnabled = input.imageGenerationEnabled;
 						codeInterpreterEnabled = input.codeInterpreterEnabled;
+						documentTranslationEnabled = input.documentTranslationEnabled ?? false;
 					}
 				} catch (e) {}
 			} else {
@@ -384,6 +387,7 @@
 		webSearchEnabled = false;
 		imageGenerationEnabled = false;
 		codeInterpreterEnabled = false;
+		documentTranslationEnabled = false;
 
 		if (selectedModelIds.filter((id) => id).length > 0) {
 			await setDefaults();
@@ -1007,6 +1011,7 @@
 				webSearchEnabled = false;
 				imageGenerationEnabled = false;
 				codeInterpreterEnabled = false;
+				documentTranslationEnabled = false;
 
 				try {
 					const input = JSON.parse(storageChatInput);
@@ -1020,6 +1025,7 @@
 						webSearchEnabled = input.webSearchEnabled;
 						imageGenerationEnabled = input.imageGenerationEnabled;
 						codeInterpreterEnabled = input.codeInterpreterEnabled;
+						documentTranslationEnabled = input.documentTranslationEnabled ?? false;
 					}
 				} catch (e) {}
 			}
@@ -2376,6 +2382,7 @@
 					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
 						? codeInterpreterEnabled
 						: false,
+				document_translation: documentTranslationEnabled,
 				web_search: webSearchActive
 			};
 
@@ -3299,6 +3306,7 @@
 										bind:selectedFilterIds
 										bind:imageGenerationEnabled
 										bind:codeInterpreterEnabled
+										bind:documentTranslationEnabled
 										{pendingOAuthTools}
 										bind:webSearchEnabled
 										bind:atSelectedModel
@@ -3363,9 +3371,11 @@
 									/>
 
 									<div
-										class="absolute bottom-1 text-xs text-gray-500 text-center line-clamp-1 right-0 left-0"
+										class="absolute bottom-1 text-xs text-gray-500 text-center right-0 left-0 px-4"
 									>
-										<!-- {$i18n.t('LLMs can make mistakes. Verify important information.')} -->
+										Latxa Llaman oinarritutako eredu bat da. Adimen Artifizialak sortutako testua
+										oker egon daiteke. Mesedez, egiaztatu erantzunak. Kontaktua:
+										<a href="mailto:latxa.hitz@ehu.eus" class="underline">latxa.hitz@ehu.eus</a>
 									</div>
 								</div>
 							{/if}
@@ -3383,6 +3393,7 @@
 									bind:selectedFilterIds
 									bind:imageGenerationEnabled
 									bind:codeInterpreterEnabled
+									bind:documentTranslationEnabled
 									bind:webSearchEnabled
 									bind:atSelectedModel
 									bind:showCommands

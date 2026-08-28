@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 
 	import {
@@ -13,6 +13,7 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
+		theme,
 		user
 	} from '$lib/stores';
 
@@ -38,9 +39,35 @@
 	import ChatPlus from '../icons/ChatPlus.svelte';
 	import ChatCheck from '../icons/ChatCheck.svelte';
 	import Knobs from '../icons/Knobs.svelte';
+	import Moon from '../icons/Moon.svelte';
+	import Sun from '../icons/Sun.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	const i18n = getContext('i18n');
+
+	let isDark = false;
+
+	const updateIsDark = () => {
+		isDark =
+			typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+	};
+
+	const toggleTheme = () => {
+		const newTheme = isDark ? 'light' : 'dark';
+		theme.set(newTheme);
+		localStorage.setItem('theme', newTheme);
+		document.documentElement.classList.remove('light', 'dark', 'her');
+		document.documentElement.classList.add(newTheme);
+		const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+		if (metaThemeColor) {
+			metaThemeColor.setAttribute('content', newTheme === 'dark' ? '#171717' : '#ffffff');
+		}
+		updateIsDark();
+	};
+
+	onMount(() => {
+		updateIsDark();
+	});
 
 	export let initNewChat: Function;
 	export let readOnly: boolean = false;
@@ -231,6 +258,22 @@
 							</button>
 						</Menu>
 					{/if}
+
+					<Tooltip content={isDark ? $i18n.t('Light Mode') : $i18n.t('Dark Mode')}>
+						<button
+							class="flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+							on:click={toggleTheme}
+							aria-label={isDark ? $i18n.t('Light Mode') : $i18n.t('Dark Mode')}
+						>
+							<div class=" m-auto self-center">
+								{#if isDark}
+									<Sun className=" size-5" strokeWidth="1.5" />
+								{:else}
+									<Moon className=" size-5" strokeWidth="1.5" />
+								{/if}
+							</div>
+						</button>
+					</Tooltip>
 
 					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
 						<Tooltip content={$i18n.t('Controls')}>

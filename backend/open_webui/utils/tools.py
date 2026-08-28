@@ -80,6 +80,7 @@ from open_webui.tools.builtin import (
     search_notes,
     search_web,
     toggle_automation,
+    translate_document,
     update_automation,
     update_calendar_event,
     update_memory,
@@ -607,6 +608,10 @@ async def get_builtin_tools(
     ):
         builtin_functions.append(edit_image)
 
+    # Document translation tool - translate an attached Word/PowerPoint/Excel/PDF file
+    if is_builtin_tool_enabled('document_translation'):
+        builtin_functions.append(translate_document)
+
     # Add code interpreter tool if builtin category enabled AND enabled globally AND model has code_interpreter capability
     if (
         is_builtin_tool_enabled('code_interpreter')
@@ -668,6 +673,7 @@ async def get_builtin_tools(
                 '__chat_id__': extra_params.get('__chat_id__'),
                 '__message_id__': extra_params.get('__message_id__'),
                 '__model_knowledge__': model_knowledge,
+                '__model__': model,
             },
         )
 

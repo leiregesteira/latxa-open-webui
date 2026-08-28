@@ -31,6 +31,7 @@
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte';
 	import Photo from '$lib/components/icons/Photo.svelte';
 	import Terminal from '$lib/components/icons/Terminal.svelte';
+	import DocumentArrowDown from '$lib/components/icons/DocumentArrowDown.svelte';
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 	import LinkSlash from '$lib/components/icons/LinkSlash.svelte';
@@ -53,6 +54,8 @@
 	export let imageGenerationEnabled = false;
 	export let showCodeInterpreterButton = false;
 	export let codeInterpreterEnabled = false;
+	export let showDocumentTranslationButton = false;
+	export let documentTranslationEnabled = false;
 
 	export let onShowValves: Function;
 	export let onClose: Function;
@@ -327,6 +330,41 @@
 								<div class=" shrink-0">
 									<Switch
 										state={imageGenerationEnabled}
+										on:change={async (e) => {
+											const state = e.detail;
+											await tick();
+										}}
+									/>
+								</div>
+							</button>
+						</Tooltip>
+					{/if}
+
+					{#if showDocumentTranslationButton}
+						<Tooltip content={$i18n.t('Translate an attached document')} placement="top-start">
+							<button
+								class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50"
+								aria-pressed={documentTranslationEnabled}
+								aria-label={documentTranslationEnabled
+									? $i18n.t('Disable Document Translation')
+									: $i18n.t('Enable Document Translation')}
+								on:click={() => {
+									documentTranslationEnabled = !documentTranslationEnabled;
+								}}
+							>
+								<div class="flex-1 truncate">
+									<div class="flex flex-1 gap-2 items-center">
+										<div class="shrink-0">
+											<DocumentArrowDown className="size-4" strokeWidth="1.5" />
+										</div>
+
+										<div class=" truncate">{$i18n.t('Translate Document')}</div>
+									</div>
+								</div>
+
+								<div class=" shrink-0">
+									<Switch
+										state={documentTranslationEnabled}
 										on:change={async (e) => {
 											const state = e.detail;
 											await tick();

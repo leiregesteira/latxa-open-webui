@@ -1,0 +1,12 @@
+/* LATXA branding: institutional blue strip at the very top of the page */
+body::before {
+	content: '';
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 6px;
+	background: #0033a0;
+	z-index: 100000;
+	pointer-events: none;
+}

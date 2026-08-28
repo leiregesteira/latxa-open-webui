@@ -275,8 +275,17 @@
 			<Spinner className="size-5" />
 		</div>
 	{:else if error}
-		<div class="absolute inset-0 flex items-center justify-center text-sm text-red-500">
-			{error}
+		<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-red-500">
+			<div>{error}</div>
+			{#if url}
+				<a
+					href={url}
+					download
+					class="text-xs underline text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+				>
+					Download file
+				</a>
+			{/if}
 		</div>
 	{/if}
 

@@ -82,6 +82,7 @@
 	import XMark from '../icons/XMark.svelte';
 	import GlobeAlt from '../icons/GlobeAlt.svelte';
 	import Photo from '../icons/Photo.svelte';
+	import DocumentArrowDown from '../icons/DocumentArrowDown.svelte';
 	import Wrench from '../icons/Wrench.svelte';
 	import Keyframes from '../icons/Keyframes.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
@@ -142,6 +143,7 @@
 	export let imageGenerationEnabled = false;
 	export let webSearchEnabled = false;
 	export let codeInterpreterEnabled = false;
+	export let documentTranslationEnabled = false;
 
 	export let pendingOAuthTools = [];
 
@@ -186,7 +188,8 @@
 		selectedFilterIds,
 		imageGenerationEnabled,
 		webSearchEnabled,
-		codeInterpreterEnabled
+		codeInterpreterEnabled,
+		documentTranslationEnabled
 	});
 
 	const inputVariableHandler = async (text: string): Promise<string> => {
@@ -552,6 +555,12 @@
 		selectedModelIds.length === imageGenerationCapableModels.length &&
 		$config?.features?.enable_image_generation &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.image_generation);
+
+	const TRANSLATABLE_DOCUMENT_EXTENSIONS = ['docx', 'pptx', 'xlsx'];
+	let showDocumentTranslationButton = false;
+	$: showDocumentTranslationButton = files.some((file) =>
+		TRANSLATABLE_DOCUMENT_EXTENSIONS.includes((file?.name ?? '').split('.').pop()?.toLowerCase())
+	);
 
 	let showCodeInterpreterButton = false;
 	$: showCodeInterpreterButton =
@@ -1747,26 +1756,28 @@
 										</button>
 									</InputMenu>
 
-									{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
+									{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showDocumentTranslationButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
 										<div
 											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50 shrink-0"
 										/>
 									{/if}
 
 									<div class="flex flex-1 items-center min-w-0 overflow-x-auto scrollbar-none">
-										{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
+										{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showDocumentTranslationButton || showToolsButton || showSkillsButton || (toggleFilters && toggleFilters.length > 0)}
 											<IntegrationsMenu
 												selectedModels={selectedModelIds}
 												{toggleFilters}
 												{showWebSearchButton}
 												{showImageGenerationButton}
 												{showCodeInterpreterButton}
+												{showDocumentTranslationButton}
 												bind:selectedToolIds
 												bind:selectedSkillIds
 												bind:selectedFilterIds
 												bind:webSearchEnabled
 												bind:imageGenerationEnabled
 												bind:codeInterpreterEnabled
+												bind:documentTranslationEnabled
 												{onWebSearchToggle}
 												closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
 												onShowValves={(e) => {
@@ -1949,6 +1960,24 @@
 															: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
 													>
 														<Photo className="size-4" strokeWidth="1.75" />
+														<div class="hidden group-hover:block">
+															<XMark className="size-4" strokeWidth="1.75" />
+														</div>
+													</button>
+												</Tooltip>
+											{/if}
+
+											{#if documentTranslationEnabled}
+												<Tooltip content={$i18n.t('Translate Document')} placement="top">
+													<button
+														on:click|preventDefault={() =>
+															(documentTranslationEnabled = !documentTranslationEnabled)}
+														type="button"
+														class="group p-[7px] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {documentTranslationEnabled
+															? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
+															: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
+													>
+														<DocumentArrowDown className="size-4" strokeWidth="1.75" />
 														<div class="hidden group-hover:block">
 															<XMark className="size-4" strokeWidth="1.75" />
 														</div>

@@ -4,6 +4,7 @@
 
 	import fileSaver from 'file-saver';
 	const { saveAs } = fileSaver;
+	import { marked } from 'marked';
 
 	import { downloadChatAsPDF } from '$lib/apis/utils';
 	import { copyToClipboard, createMessagesList } from '$lib/utils';
@@ -75,6 +76,48 @@
 		});
 
 		saveAs(blob, `chat-${chat.chat.title}.txt`);
+	};
+
+	const downloadMarkdown = async () => {
+		const chatText = await getChatAsText();
+
+		let blob = new Blob([chatText], {
+			type: 'text/markdown'
+		});
+
+		saveAs(blob, `chat-${chat.chat.title}.md`);
+	};
+
+	const downloadHtml = async () => {
+		const chatText = await getChatAsText();
+		const htmlContent = marked.parse(chatText);
+
+		const fullHtml = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${chat.chat.title}</title>
+<style>
+	body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 16px; }
+	pre { background-color: #f6f8fa; border-radius: 6px; padding: 16px; overflow: auto; }
+	code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 14px; }
+	table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+	table, th, td { border: 1px solid #dfe2e5; }
+	th, td { padding: 8px 12px; }
+	th { background-color: #f6f8fa; }
+	blockquote { border-left: 4px solid #dfe2e5; padding-left: 16px; color: #6a737d; margin-left: 0; }
+</style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`;
+
+		let blob = new Blob([fullHtml], {
+			type: 'text/html'
+		});
+
+		saveAs(blob, `chat-${chat.chat.title}.html`);
 	};
 
 	const downloadPdf = async () => {
@@ -417,6 +460,26 @@
 						draggable="false"
 						class="flex gap-2 items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl select-none w-full"
 						on:click={() => {
+							downloadMarkdown();
+						}}
+					>
+						<div class="flex items-center line-clamp-1">{$i18n.t('Markdown (.md)')}</div>
+					</button>
+
+					<button
+						draggable="false"
+						class="flex gap-2 items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl select-none w-full"
+						on:click={() => {
+							downloadHtml();
+						}}
+					>
+						<div class="flex items-center line-clamp-1">{$i18n.t('HTML (.html)')}</div>
+					</button>
+
+					<button
+						draggable="false"
+						class="flex gap-2 items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl select-none w-full"
+						on:click={() => {
 							downloadPdf();
 						}}
 					>
@@ -430,7 +493,7 @@
 				class="flex gap-2 items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl select-none w-full"
 				id="chat-copy-button"
 				on:click={async () => {
-					const res = await copyToClipboard(await getChatAsText()).catch((e) => {
+					const res = await copyToClipboard(await getChatAsText(), null, true).catch((e) => {
 						console.error(e);
 					});
 

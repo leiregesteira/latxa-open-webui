@@ -137,6 +137,54 @@ class PptxLoader:
         ]
 
 
+class OdsLoader:
+    """Fallback OpenDocument Spreadsheet loader using pandas when unstructured is not installed."""
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def load(self) -> list[Document]:
+        import pandas as pd
+
+        text_parts = []
+        xls = pd.ExcelFile(self.file_path, engine='odf')
+        for sheet_name in xls.sheet_names:
+            df = pd.read_excel(xls, sheet_name=sheet_name)
+            text_parts.append(f'Sheet: {sheet_name}\n{df.to_string(index=False)}')
+        return [
+            Document(
+                page_content='\n\n'.join(text_parts),
+                metadata={'source': self.file_path},
+            )
+        ]
+
+
+class OdpLoader:
+    """Fallback OpenDocument Presentation loader using odfpy when unstructured is not installed."""
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def load(self) -> list[Document]:
+        from odf.draw import Page
+        from odf.opendocument import load as load_odf
+        from odf.text import P
+
+        doc = load_odf(self.file_path)
+        text_parts = []
+        for i, page in enumerate(doc.getElementsByType(Page), 1):
+            slide_texts = [str(node) for node in page.getElementsByType(P)]
+            slide_texts = [t for t in slide_texts if t.strip()]
+            if slide_texts:
+                text_parts.append(f'Slide {i}:\n' + '\n'.join(slide_texts))
+        return [
+            Document(
+                page_content='\n\n'.join(text_parts),
+                metadata={'source': self.file_path},
+            )
+        ]
+
+
 class TikaLoader:
     def __init__(self, url, file_path, mime_type=None, extract_images=None):
         self.url = url
@@ -665,6 +713,12 @@ class Loader:
                         "Processing .odt files requires the 'unstructured' package. "
                         'Install it with: pip install unstructured'
                     )
+            elif file_content_type == 'application/vnd.oasis.opendocument.spreadsheet' or file_ext == 'ods':
+                # 'unstructured' has no dedicated ODS partitioner; use the native odfpy/pandas loader directly.
+                loader = OdsLoader(file_path)
+            elif file_content_type == 'application/vnd.oasis.opendocument.presentation' or file_ext == 'odp':
+                # 'unstructured' has no dedicated ODP partitioner; use the native odfpy loader directly.
+                loader = OdpLoader(file_path)
             elif self._is_text_file(file_ext, file_content_type):
                 loader = TextLoader(file_path, encoding=self._detect_text_encoding(file_path))
             else:

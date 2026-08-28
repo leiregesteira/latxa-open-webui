@@ -3,6 +3,7 @@
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount, tick, onDestroy } from 'svelte';
 	import { config, pyodideWorker as pyodideWorkerStore } from '$lib/stores';
+	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	import { createPyodideWorker } from '$lib/pyodide/createPyodideWorker';
 	import { executeCode } from '$lib/apis/utils';
@@ -72,6 +73,7 @@
 	let stderr = null;
 	let result = null;
 	let files = null;
+	let downloadableFiles = null;
 
 	let copied = false;
 	let saved = false;
@@ -143,6 +145,7 @@
 		result = null;
 		stdout = null;
 		stderr = null;
+		downloadableFiles = null;
 
 		executing = true;
 
@@ -153,6 +156,10 @@
 			});
 
 			if (output) {
+				if (output['files'] && output['files'].length > 0) {
+					downloadableFiles = output['files'];
+				}
+
 				if (output['stdout']) {
 					stdout = output['stdout'];
 					const stdoutLines = stdout.split('\n');
@@ -625,6 +632,22 @@
 											{/each}
 										</div>
 									{/if}
+								</div>
+							{/if}
+							{#if downloadableFiles && downloadableFiles.length > 0}
+								<div class=" ">
+									<div class=" text-gray-500 text-xs mb-1">{$i18n.t('Files')}</div>
+									<ul class="mt-1 list-disc pl-4 text-sm">
+										{#each downloadableFiles as file}
+											<li>
+												<a
+													href={file.url.startsWith('/') ? `${WEBUI_BASE_URL}${file.url}` : file.url}
+													target="_blank"
+													download={file.name}>{file.name}</a
+												>
+											</li>
+										{/each}
+									</ul>
 								</div>
 							{/if}
 						{/if}

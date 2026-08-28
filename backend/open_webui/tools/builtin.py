@@ -424,6 +424,110 @@ async def edit_image(
 
 
 # =============================================================================
+# DOCUMENT TRANSLATION TOOLS
+# =============================================================================
+
+
+async def translate_document(
+    file_id: str,
+    target_language: str,
+    __request__: Request = None,
+    __user__: dict = None,
+    __event_emitter__: callable = None,
+    __chat_id__: str = None,
+    __message_id__: str = None,
+    __model__: dict = None,
+    __model_knowledge__: Optional[list[dict]] = None,
+) -> str:
+    """
+    Translate an uploaded Word (.docx), PowerPoint (.pptx), or Excel (.xlsx)
+    document into another language, returning a new file in the same format with
+    the translation applied. Pass the file_id of the document the user attached
+    to this conversation.
+
+    :param file_id: The ID of the attached document to translate
+    :param target_language: The language to translate the document into (e.g. "Basque", "Spanish", "English")
+    :return: Confirmation that the translated file was generated, or an error message
+    """
+    if __request__ is None:
+        return json.dumps({'error': 'Request context not available'})
+    if not __user__:
+        return json.dumps({'error': 'User context not available'})
+
+    try:
+        import os
+
+        from open_webui.models.files import Files
+        from open_webui.storage.provider import Storage
+        from open_webui.utils.document_translation import TRANSLATORS, persist_translated_file
+
+        user_id = __user__.get('id')
+        user_role = __user__.get('role', 'user')
+
+        file = await Files.get_file_by_id(file_id)
+        if not file:
+            return json.dumps({'error': 'File not found'})
+
+        if not await _has_read_access_to_file(file, user_id, user_role, __model_knowledge__):
+            return json.dumps({'error': 'File not found'})
+
+        extension = os.path.splitext(file.filename)[1][1:].lower()
+        translator = TRANSLATORS.get(extension)
+        if not translator:
+            return json.dumps(
+                {'error': f'Unsupported document format: .{extension}. Supported formats: docx, pptx, xlsx'}
+            )
+
+        model_id = (__model__ or {}).get('id') or (__model__ or {}).get('info', {}).get('id')
+        if not model_id:
+            return json.dumps({'error': 'No model available to perform the translation'})
+
+        user = UserModel(**__user__)
+        source_path = Storage.get_file(file.path)
+
+        translated_bytes, had_failures = await translator(source_path, target_language, __request__, model_id, user)
+        new_file_entry = await persist_translated_file(user, file.filename, extension, translated_bytes)
+        new_name = new_file_entry['name']
+        result_files = [new_file_entry]
+
+        if __chat_id__ and __message_id__:
+            db_files = await Chats.add_message_files_by_id_and_message_id(
+                __chat_id__,
+                __message_id__,
+                result_files,
+            )
+            if db_files is not None:
+                result_files = db_files
+
+        warning = (
+            ' Some parts of the document could not be translated due to server load and were kept in the original language — let the user know.'
+            if had_failures
+            else ''
+        )
+
+        if __event_emitter__:
+            await __event_emitter__(
+                {
+                    'type': 'chat:message:files',
+                    'data': {'files': result_files},
+                }
+            )
+            return json.dumps(
+                {
+                    'status': 'success',
+                    'message': f'The translated document "{new_name}" has been generated and is already visible to the user in the chat as a downloadable file. You do not need to display it again — just acknowledge that it is ready.{warning}',
+                    'file': new_name,
+                },
+                ensure_ascii=False,
+            )
+
+        return json.dumps({'status': 'success', 'file': new_name, 'partial': had_failures}, ensure_ascii=False)
+    except Exception as e:
+        log.exception(f'translate_document error: {e}')
+        return json.dumps({'error': str(e)})
+
+
+# =============================================================================
 # CODE INTERPRETER TOOLS
 # =============================================================================
 
@@ -483,6 +587,14 @@ async def execute_code(
             )
             code = blocking_code + '\n' + code
 
+        resolved_user = None
+        if __user__ and __user__.get('id'):
+            from open_webui.models.users import Users
+
+            resolved_user = await Users.get_user_by_id(__user__['id'])
+
+        output_files = []
+
         engine = await Config.get('code_interpreter.engine', 'pyodide')
         if engine == 'pyodide':
             # Execute via frontend pyodide using bidirectional event call
@@ -530,22 +642,22 @@ async def execute_code(
                 (await Config.get('code_interpreter.jupyter.auth_token') if jupyter_auth == 'token' else None),
                 (await Config.get('code_interpreter.jupyter.auth_password') if jupyter_auth == 'password' else None),
                 await Config.get('code_interpreter.jupyter.timeout'),
+                user=resolved_user,
             )
 
             stdout = output.get('stdout', '')
             stderr = output.get('stderr', '')
             result = output.get('result', '')
+            output_files = output.get('files') or []
 
         else:
             return json.dumps({'error': f'Unknown code interpreter engine: {engine}'})
 
         # Handle image outputs (base64 encoded) - replace with uploaded URLs
-        # Get actual user object for image upload (upload_image requires user.id attribute)
-        if __user__ and __user__.get('id'):
-            from open_webui.models.users import Users
+        if resolved_user:
             from open_webui.utils.files import get_image_url_from_base64
 
-            user = await Users.get_user_by_id(__user__['id'])
+            user = resolved_user
 
             # Extract and upload images from stdout
             if stdout and isinstance(stdout, str):
@@ -583,6 +695,8 @@ async def execute_code(
             'stderr': stderr,
             'result': result,
         }
+        if output_files:
+            response['files'] = output_files
 
         return json.dumps(response, ensure_ascii=False)
     except Exception as e:

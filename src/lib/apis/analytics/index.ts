@@ -288,6 +288,66 @@ export const getModelChats = async (
 	return res;
 };
 
+export const getPricing = async (token: string = '') => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/pricing`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const updatePricing = async (
+	token: string = '',
+	pricing: Record<string, { input_price_per_million: number; output_price_per_million: number }>
+) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/analytics/pricing`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify(pricing)
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const getModelOverview = async (token: string = '', modelId: string, days: number = 30) => {
 	let error = null;
 

@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import json
 import logging
 import uuid
@@ -20,6 +22,7 @@ class ResultModel(BaseModel):
     stdout: Optional[str] = ''
     stderr: Optional[str] = ''
     result: Optional[str] = ''
+    files: Optional[list[dict]] = None
 
 
 class JupyterCodeExecuter:
@@ -34,6 +37,7 @@ class JupyterCodeExecuter:
         token: str = '',
         password: str = '',
         timeout: int = 60,
+        user=None,
     ):
         """
         :param base_url: Jupyter server URL (e.g., "http://localhost:8888")
@@ -41,12 +45,14 @@ class JupyterCodeExecuter:
         :param token: Jupyter authentication token (optional)
         :param password: Jupyter password (optional)
         :param timeout: WebSocket timeout in seconds (default: 60s)
+        :param user: authenticated user, used to own any files the executed code creates
         """
         self.base_url = base_url
         self.code = code
         self.token = token
         self.password = password
         self.timeout = timeout
+        self.user = user
         self.kernel_id = ''
         if self.base_url[-1] != '/':
             self.base_url += '/'
@@ -70,11 +76,94 @@ class JupyterCodeExecuter:
         try:
             await self.sign_in()
             await self.init_kernel()
+            files_before = await self.list_workspace_files()
             await self.execute_code()
+            files_after = await self.list_workspace_files()
+            await self.collect_created_files(files_before, files_after)
         except Exception as err:
             logger.exception('execute code failed, %s', err)
             self.result.stderr = f'Error: {err}'
         return self.result
+
+    async def list_workspace_files(self) -> dict:
+        """List files in the kernel's working directory (Jupyter Contents API), keyed by path."""
+        try:
+            async with self.session.get('api/contents', params=self.params) as response:
+                response.raise_for_status()
+                listing = await response.json()
+        except Exception as err:
+            logger.warning('could not list jupyter workspace files, %s', err)
+            return {}
+
+        return {
+            item['path']: item.get('last_modified')
+            for item in listing.get('content', [])
+            if item.get('type') == 'file'
+        }
+
+    async def collect_created_files(self, files_before: dict, files_after: dict) -> None:
+        """Detect files newly created or modified by the executed code and store them as downloadable files."""
+        if self.user is None:
+            return
+
+        new_or_changed = [
+            path
+            for path, last_modified in files_after.items()
+            if path not in files_before or files_before[path] != last_modified
+        ]
+        if not new_or_changed:
+            return
+
+        # Deferred imports: this module doesn't otherwise depend on the app's storage/db layer.
+        from open_webui.models.files import FileForm, Files
+        from open_webui.storage.provider import Storage
+
+        stored_files = []
+        for path in new_or_changed:
+            try:
+                async with self.session.get(f'api/contents/{path}', params=self.params) as response:
+                    response.raise_for_status()
+                    file_data = await response.json()
+
+                if file_data.get('type') != 'file':
+                    continue
+
+                content = file_data.get('content', '')
+                if file_data.get('format') == 'base64':
+                    raw_bytes = base64.b64decode(content)
+                else:
+                    raw_bytes = content.encode('utf-8')
+
+                name = path.rsplit('/', 1)[-1]
+                file_id = str(uuid.uuid4())
+                storage_filename = f'{file_id}_{name}'
+                tags = {'OpenWebUI-File-Id': file_id, 'OpenWebUI-User-Id': self.user.id}
+
+                _, file_path = await asyncio.to_thread(
+                    Storage.upload_file, io.BytesIO(raw_bytes), storage_filename, tags
+                )
+
+                await Files.insert_new_file(
+                    self.user.id,
+                    FileForm(
+                        id=file_id,
+                        filename=name,
+                        path=file_path,
+                        data={},
+                        meta={
+                            'name': name,
+                            'content_type': file_data.get('mimetype'),
+                            'size': len(raw_bytes),
+                        },
+                    ),
+                )
+
+                stored_files.append({'id': file_id, 'name': name, 'url': f'/api/v1/files/{file_id}/content'})
+            except Exception as err:
+                logger.warning('could not store code-execution output file %s, %s', path, err)
+
+        if stored_files:
+            self.result.files = stored_files
 
     async def sign_in(self) -> None:
         # password authentication
@@ -190,8 +279,8 @@ class JupyterCodeExecuter:
 
 
 async def execute_code_jupyter(
-    base_url: str, code: str, token: str = '', password: str = '', timeout: int = 60
+    base_url: str, code: str, token: str = '', password: str = '', timeout: int = 60, user=None
 ) -> dict:
-    async with JupyterCodeExecuter(base_url, code, token, password, timeout) as executor:
+    async with JupyterCodeExecuter(base_url, code, token, password, timeout, user=user) as executor:
         result = await executor.run()
         return result.model_dump()

@@ -5,6 +5,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Badge from '$lib/components/common/Badge.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
+	import { WEBUI_BASE_URL } from '$lib/constants';
 	const i18n = getContext('i18n');
 
 	export let show = false;
@@ -97,7 +98,11 @@
 						<ul class="mt-1 list-disc pl-4 text-xs">
 							{#each codeExecution?.result?.files as file}
 								<li>
-									<a href={file.url} target="_blank">{file.name}</a>
+									<a
+										href={file.url.startsWith('/') ? `${WEBUI_BASE_URL}${file.url}` : file.url}
+										target="_blank"
+										download={file.name}>{file.name}</a
+									>
 								</li>
 							{/each}
 						</ul>

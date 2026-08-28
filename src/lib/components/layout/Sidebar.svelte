@@ -83,6 +83,13 @@
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
+	import BookOpen from '../icons/BookOpen.svelte';
+	import Scale from '../icons/Scale.svelte';
+	import UsageGuideModal from './Sidebar/UsageGuideModal.svelte';
+	import TermsModal from './Sidebar/TermsModal.svelte';
+
+	let showUsageGuide = false;
+	let showTerms = false;
 
 	const BREAKPOINT = 768;
 	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
@@ -720,6 +727,9 @@
 	const isWindows = /Windows/i.test(navigator.userAgent);
 </script>
 
+<UsageGuideModal bind:show={showUsageGuide} />
+<TermsModal bind:show={showTerms} />
+
 <ArchivedChatsModal
 	bind:show={$showArchivedChats}
 	onUpdate={async () => {
@@ -1089,29 +1099,13 @@
 						</div>
 					</button>
 				</Tooltip>
-
-				<div
-					class="{scrollTop > 0
-						? 'visible'
-						: 'invisible'} sidebar-bg-gradient-to-b bg-linear-to-b from-gray-50 dark:from-gray-950 to-transparent from-50% pointer-events-none absolute inset-0 -z-10 -mb-6"
-				></div>
 			</div>
 
-			<div
-				class="relative flex flex-col flex-1 overflow-y-auto scrollbar-hidden pt-3 pb-3"
-				on:scroll={(e) => {
-					if (e.target.scrollTop === 0) {
-						scrollTop = 0;
-					} else {
-						scrollTop = e.target.scrollTop;
-					}
-				}}
-			>
-				<div class="pb-1.5">
+			<div class="pb-1.5">
 					<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
 						<a
 							id="sidebar-new-chat-button"
-							class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
+							class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 bg-gray-100/70 dark:bg-gray-850/60 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition outline-none"
 							href="/"
 							draggable="false"
 							on:click={newChatHandler}
@@ -1132,7 +1126,7 @@
 					<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
 						<button
 							id="sidebar-search-button"
-							class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
+							class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 bg-gray-100/70 dark:bg-gray-850/60 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition outline-none"
 							on:click={() => {
 								showSearch.set(true);
 							}}
@@ -1160,7 +1154,7 @@
 								>
 									<a
 										id="sidebar-{itemId}-button"
-										class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+										class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 bg-gray-100/70 dark:bg-gray-850/60 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition"
 										href={meta.href}
 										on:click={itemClickHandler}
 										draggable="false"
@@ -1229,6 +1223,16 @@
 					</div>
 				</div>
 
+			<div
+				class="relative flex flex-col flex-1 overflow-y-auto scrollbar-hidden pt-3 pb-3"
+				on:scroll={(e) => {
+					if (e.target.scrollTop === 0) {
+						scrollTop = 0;
+					} else {
+						scrollTop = e.target.scrollTop;
+					}
+				}}
+			>
 				{#if ($models ?? []).length > 0 && (($settings?.pinnedModels ?? []).length > 0 || $config?.default_pinned_models)}
 					<Folder
 						id="sidebar-models"
@@ -1602,7 +1606,39 @@
 				</Folder>
 			</div>
 
-			<div class="px-1.5 pt-1.5 pb-2 sticky bottom-0 z-10 -mt-3 sidebar">
+			<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
+				<a
+					class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 bg-gray-100/70 dark:bg-gray-850/60 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition cursor-pointer"
+					href="javascript:void(0)"
+					on:click={() => (showUsageGuide = true)}
+					draggable="false"
+				>
+					<div class="self-center">
+						<BookOpen className="size-4.5" strokeWidth="2" />
+					</div>
+					<div class="flex self-center translate-y-[0.5px]">
+						<div class="self-center text-sm font-primary">{$i18n.t('Usage Guide')}</div>
+					</div>
+				</a>
+			</div>
+
+			<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
+				<a
+					class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 bg-gray-100/70 dark:bg-gray-850/60 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition cursor-pointer"
+					href="javascript:void(0)"
+					on:click={() => (showTerms = true)}
+					draggable="false"
+				>
+					<div class="self-center">
+						<Scale className="size-4.5" strokeWidth="2" />
+					</div>
+					<div class="flex self-center translate-y-[0.5px]">
+						<div class="self-center text-sm font-primary">{$i18n.t('Terms')}</div>
+					</div>
+				</a>
+			</div>
+
+			<div class="px-1.5 pt-1.5 pb-2 sticky bottom-0 z-10 sidebar">
 				<div
 					class=" sidebar-bg-gradient-to-t bg-linear-to-t from-gray-50 dark:from-gray-950 to-transparent from-50% pointer-events-none absolute inset-0 -z-10 -mt-6"
 				></div>

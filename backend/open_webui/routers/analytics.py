@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from open_webui.internal.db import get_async_session
 from open_webui.models.chat_messages import ChatMessageModel, ChatMessages
 from open_webui.models.chats import Chats
+from open_webui.models.config import Config
 from open_webui.models.feedbacks import Feedbacks
 from open_webui.models.groups import Groups
 from open_webui.models.users import Users
@@ -223,6 +224,7 @@ class TokenUsageEntry(BaseModel):
     output_tokens: int
     total_tokens: int
     message_count: int
+    cost: float = 0.0
 
 
 class TokenUsageResponse(BaseModel):
@@ -230,6 +232,39 @@ class TokenUsageResponse(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
     total_tokens: int
+    total_cost: float = 0.0
+
+
+ANALYTICS_PRICING_CONFIG_KEY = 'analytics.pricing'
+
+
+class ModelPricing(BaseModel):
+    # Prices are per 1 million tokens, in whatever currency the admin tracks costs in.
+    input_price_per_million: float = 0.0
+    output_price_per_million: float = 0.0
+
+
+def _compute_cost(input_tokens: int, output_tokens: int, pricing: dict) -> float:
+    if not pricing:
+        return 0.0
+    input_price = pricing.get('input_price_per_million', 0) or 0
+    output_price = pricing.get('output_price_per_million', 0) or 0
+    return (input_tokens / 1_000_000) * input_price + (output_tokens / 1_000_000) * output_price
+
+
+@router.get('/pricing', response_model=dict[str, ModelPricing])
+async def get_pricing(user=Depends(get_admin_user)):
+    """Get per-model token pricing used to estimate costs in the analytics dashboard."""
+    pricing = await Config.get(ANALYTICS_PRICING_CONFIG_KEY, {})
+    return {model_id: ModelPricing(**entry) for model_id, entry in (pricing or {}).items()}
+
+
+@router.post('/pricing', response_model=dict[str, ModelPricing])
+async def update_pricing(pricing: dict[str, ModelPricing], user=Depends(get_admin_user)):
+    """Set per-model token pricing (price per 1 million input/output tokens)."""
+    serialized = {model_id: entry.model_dump() for model_id, entry in pricing.items()}
+    await Config.upsert({ANALYTICS_PRICING_CONFIG_KEY: serialized})
+    return pricing
 
 
 @router.get('/tokens', response_model=TokenUsageResponse)
@@ -240,24 +275,31 @@ async def get_token_usage(
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get token usage aggregated by model."""
+    """Get token usage aggregated by model, with estimated cost based on configured pricing."""
     usage = await ChatMessages.get_token_usage_by_model(
         start_date=start_date, end_date=end_date, group_id=group_id, db=db
     )
+    pricing = await Config.get(ANALYTICS_PRICING_CONFIG_KEY, {}) or {}
 
     models = [
-        TokenUsageEntry(model_id=model_id, **data)
+        TokenUsageEntry(
+            model_id=model_id,
+            **data,
+            cost=_compute_cost(data['input_tokens'], data['output_tokens'], pricing.get(model_id)),
+        )
         for model_id, data in sorted(usage.items(), key=lambda x: -x[1]['total_tokens'])
     ]
 
     total_input = sum(m.input_tokens for m in models)
     total_output = sum(m.output_tokens for m in models)
+    total_cost = sum(m.cost for m in models)
 
     return TokenUsageResponse(
         models=models,
         total_input_tokens=total_input,
         total_output_tokens=total_output,
         total_tokens=total_input + total_output,
+        total_cost=total_cost,
     )
 
 
