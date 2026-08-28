@@ -159,8 +159,14 @@ def _apply_translated_paragraph(paragraph, new_text: str) -> None:
 
     cursor = 0
     for run, count in zip(runs, word_counts):
-        run.text = ' '.join(words[cursor : cursor + count])
+        text = ' '.join(words[cursor : cursor + count])
         cursor += count
+        # Runs are rendered back-to-back with no implicit gap between them, so
+        # a non-empty run followed by more words needs its own trailing space
+        # or the next run's text glues onto it with no space in between.
+        if text and cursor < len(words):
+            text += ' '
+        run.text = text
 
 
 async def translate_docx_bytes(path: str, target_language: str, request, model_id: str, user) -> tuple[bytes, bool]:

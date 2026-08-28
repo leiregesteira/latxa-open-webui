@@ -558,18 +558,35 @@ ${htmlContent}
 	const downloadXlsx = async () => {
 		if (tables.length === 0) return;
 
-		const XLSX = await import('xlsx');
-		const workbook = XLSX.utils.book_new();
+		// xlsx (SheetJS community build) can't write cell styles — only exceljs
+		// (also MIT-licensed) supports bold/formatting on write, needed to keep
+		// header rows bold like the DOCX export already does.
+		const ExcelJS = (await import('exceljs')).default;
+		const workbook = new ExcelJS.Workbook();
 
 		tables.forEach((table, idx) => {
 			const header = (table.header ?? []).map((cell: any) => cell.text ?? '');
 			const rows = (table.rows ?? []).map((row: any[]) => row.map((cell: any) => cell.text ?? ''));
-			const sheetData = [header, ...rows];
-			const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-			XLSX.utils.book_append_sheet(workbook, worksheet, `Tabla ${idx + 1}`);
+			const worksheet = workbook.addWorksheet(`Tabla ${idx + 1}`);
+
+			if (header.length > 0) {
+				const headerRow = worksheet.addRow(header);
+				headerRow.eachCell((cell) => {
+					cell.font = { bold: true };
+				});
+			}
+			rows.forEach((row) => worksheet.addRow(row));
+
+			worksheet.columns.forEach((column) => {
+				let maxLength = 10;
+				column.eachCell?.({ includeEmpty: true }, (cell) => {
+					maxLength = Math.max(maxLength, String(cell.value ?? '').length);
+				});
+				column.width = Math.min(maxLength + 2, 60);
+			});
 		});
 
-		const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+		const arrayBuffer = await workbook.xlsx.writeBuffer();
 		const blob = new Blob([arrayBuffer], {
 			type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 		});

@@ -556,11 +556,7 @@
 		$config?.features?.enable_image_generation &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.image_generation);
 
-	const TRANSLATABLE_DOCUMENT_EXTENSIONS = ['docx', 'pptx', 'xlsx'];
-	let showDocumentTranslationButton = false;
-	$: showDocumentTranslationButton = files.some((file) =>
-		TRANSLATABLE_DOCUMENT_EXTENSIONS.includes((file?.name ?? '').split('.').pop()?.toLowerCase())
-	);
+	const showDocumentTranslationButton = true;
 
 	let showCodeInterpreterButton = false;
 	$: showCodeInterpreterButton =
