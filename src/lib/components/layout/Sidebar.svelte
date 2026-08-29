@@ -84,12 +84,9 @@
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
 	import BookOpen from '../icons/BookOpen.svelte';
-	import Scale from '../icons/Scale.svelte';
 	import UsageGuideModal from './Sidebar/UsageGuideModal.svelte';
-	import TermsModal from './Sidebar/TermsModal.svelte';
 
 	let showUsageGuide = false;
-	let showTerms = false;
 
 	const BREAKPOINT = 768;
 	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
@@ -728,7 +725,6 @@
 </script>
 
 <UsageGuideModal bind:show={showUsageGuide} />
-<TermsModal bind:show={showTerms} />
 
 <ArchivedChatsModal
 	bind:show={$showArchivedChats}
@@ -1618,22 +1614,6 @@
 					</div>
 					<div class="flex self-center translate-y-[0.5px]">
 						<div class="self-center text-sm font-primary">{$i18n.t('Usage Guide')}</div>
-					</div>
-				</a>
-			</div>
-
-			<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
-				<a
-					class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 bg-gray-100/70 dark:bg-gray-850/60 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition cursor-pointer"
-					href="javascript:void(0)"
-					on:click={() => (showTerms = true)}
-					draggable="false"
-				>
-					<div class="self-center">
-						<Scale className="size-4.5" strokeWidth="2" />
-					</div>
-					<div class="flex self-center translate-y-[0.5px]">
-						<div class="self-center text-sm font-primary">{$i18n.t('Terms')}</div>
 					</div>
 				</a>
 			</div>
