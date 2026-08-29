@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    image: ghcr.io/leiregesteira/latxa-open-webui:${WEBUI_DOCKER_TAG-main}
     container_name: open-webui
     volumes:
       - open-webui:/app/backend/data
@@ -13,6 +13,7 @@ services:
       - 'WEBUI_SECRET_KEY=YAuj4BUpGL5BUidUSoTd9XEmVrcM1OF66EGIR7nsoMo='
       - 'WEBUI_NAME=LATXA'
       - 'WHISPER_MODEL=small'
+      - 'ENABLE_OLLAMA_API=false'
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
