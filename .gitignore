@@ -1,5 +1,6 @@
 x.py
 yarn.lock
+start-dev.ps1
 .DS_Store
 node_modules
 /build
