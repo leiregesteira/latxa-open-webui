@@ -76,8 +76,11 @@ export const functions = writable(null);
 export const toolServers = writable([]);
 export const terminalServers = writable([]);
 
-// Persistent Pyodide worker for code interpreter FS
+// Persistent Pyodide worker for code interpreter FS, scoped to the chat it was created for.
+// When the active chat changes, consumers should terminate and recreate it so state from
+// one conversation doesn't leak into another.
 export const pyodideWorker: Writable<Worker | null> = writable(null);
+export const pyodideWorkerChatId: Writable<string> = writable('');
 
 export const banners: Writable<Banner[]> = writable([]);
 

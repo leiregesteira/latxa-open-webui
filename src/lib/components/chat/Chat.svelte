@@ -2433,15 +2433,20 @@
 			return fileExists;
 		});
 
-		let files = structuredClone(chatFiles);
-		files.push(
-			...(userMessage?.files ?? []).filter(
-				(item) =>
-					['doc', 'text', 'note', 'chat', 'collection', 'folder'].includes(item.type) ||
-					(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/'))
-			)
+		// If the current message attaches its own document(s), scope this turn's RAG
+		// context to just those — otherwise a newly attached file gets diluted by (or
+		// loses out to) older documents still lingering in chatFiles from earlier in
+		// the conversation. Falls back to the accumulated chatFiles for follow-up
+		// questions that don't attach anything new, so those keep working as before.
+		const currentMessageFiles = (userMessage?.files ?? []).filter(
+			(item) =>
+				['doc', 'text', 'note', 'chat', 'collection', 'folder'].includes(item.type) ||
+				(item.type === 'file' && !(item?.content_type ?? '').startsWith('image/'))
 		);
-		// Remove duplicates
+
+		let files =
+			currentMessageFiles.length > 0 ? currentMessageFiles : structuredClone(chatFiles);
+		// Remove duplicatesque tal va? no esta tardando cuho=
 		files = files.filter((item, index, array) => array.findIndex((i) => equal(i, item)) === index);
 
 		scrollToBottom();
@@ -3370,9 +3375,7 @@
 										}}
 									/>
 
-									<div
-										class="absolute bottom-1 text-xs text-gray-500 text-center right-0 left-0 px-4"
-									>
+									<div class="text-xs text-gray-500 text-center px-4 pt-1">
 										Latxa Llaman oinarritutako eredu bat da. Adimen Artifizialak sortutako testua
 										oker egon daiteke. Mesedez, egiaztatu erantzunak. Kontaktua:
 										<a href="mailto:latxa.hitz@ehu.eus" class="underline">latxa.hitz@ehu.eus</a>

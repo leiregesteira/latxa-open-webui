@@ -857,7 +857,7 @@ async def _make_channel_emitter(request_info):
     channel_id = request_info['chat_id'].removeprefix('channel:')
     message_id = request_info['message_id']
 
-    state = {'last_emit_at': 0.0}
+    state = {'last_emit_at': 0.0, 'accumulated': ''}
     THROTTLE_INTERVAL = 0.15  # ~6 updates/sec
 
     async def _emit_channel_update(content: str, done: bool = False):
@@ -892,21 +892,45 @@ async def _make_channel_emitter(request_info):
                 to=f'channel:{channel_id}',
             )
 
+    def _extract_text(data: dict):
+        # chat:completion events come in two shapes depending on the backend
+        # response format:
+        #   (a) OpenAI chat-completion-chunk: {"choices": [{"delta": {"content": "..."}}]}
+        #       -- content here is a per-token DELTA.
+        #   (b) Responses-API style: {"output": [{"content": [{"type": "output_text", "text": "..."}]}]}
+        #       -- text here is already the FULL cumulative text so far.
+        # Prefer (b) since it's self-contained; fall back to accumulating (a)'s deltas.
+        output = data.get('output')
+        if isinstance(output, list):
+            for item in output:
+                for part in item.get('content', []) or []:
+                    if part.get('type') == 'output_text' and 'text' in part:
+                        return part['text']
+        return None
+
     async def __channel_emitter__(event_data):
         event_type = event_data.get('type')
 
         if event_type == 'chat:completion':
             data = event_data.get('data', {})
-            content = data.get('content', '')
-            done = data.get('done', False)
+            done = bool(data.get('done', False))
 
-            if not content and not done:
+            full_text = _extract_text(data)
+            if full_text is not None:
+                state['accumulated'] = full_text
+            else:
+                for choice in data.get('choices', []) or []:
+                    delta_content = (choice.get('delta') or {}).get('content')
+                    if delta_content:
+                        state['accumulated'] += delta_content
+
+            if not state['accumulated'] and not done:
                 return
 
             now = __import__('time').time()
             if done or (now - state['last_emit_at']) >= THROTTLE_INTERVAL:
                 state['last_emit_at'] = now
-                await _emit_channel_update(content, done)
+                await _emit_channel_update(state['accumulated'], done)
 
         elif event_type == 'chat:message:error':
             error = event_data.get('data', {}).get('error', {})

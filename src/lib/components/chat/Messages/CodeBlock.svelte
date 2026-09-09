@@ -1,8 +1,8 @@
 <script lang="ts">
 	import hljs from 'highlight.js';
 	import { toast } from 'svelte-sonner';
-	import { getContext, onMount, tick, onDestroy } from 'svelte';
-	import { config, pyodideWorker as pyodideWorkerStore } from '$lib/stores';
+	import { getContext, onMount, tick } from 'svelte';
+	import { config, pyodideWorker as pyodideWorkerStore, pyodideWorkerChatId, chatId } from '$lib/stores';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	import { createPyodideWorker } from '$lib/pyodide/createPyodideWorker';
@@ -49,8 +49,6 @@
 	export let className = '';
 	export let editorClassName = '';
 	export let stickyButtonsClassName = 'top-0';
-
-	let localPyodideWorker = null;
 
 	let _code = '';
 	$: if (code) {
@@ -246,15 +244,20 @@
 
 		console.log(packages);
 
-		// Reuse the shared Pyodide worker when code interpreter is active,
-		// so files written here are immediately visible in PyodideFileNav.
-		// Otherwise fall back to a throwaway worker.
-		const sharedWorker = $pyodideWorkerStore;
-		const isShared = !!sharedWorker;
-		const worker = sharedWorker ?? createPyodideWorker();
-
-		if (!isShared) {
-			localPyodideWorker = worker;
+		// Reuse the persistent, shared Pyodide worker (same one used by the code
+		// interpreter) so that code blocks in the same chat can build on each other's
+		// definitions, and files written here are visible in PyodideFileNav. Scoped to
+		// the active chat: switching conversations starts a fresh Python session.
+		const activeChatId = $chatId;
+		let worker = $pyodideWorkerStore;
+		if (worker && $pyodideWorkerChatId !== activeChatId) {
+			worker.terminate();
+			worker = null;
+		}
+		if (!worker) {
+			worker = createPyodideWorker();
+			pyodideWorkerStore.set(worker);
+			pyodideWorkerChatId.set(activeChatId);
 		}
 
 		worker.postMessage({
@@ -267,10 +270,10 @@
 			if (executing) {
 				executing = false;
 				stderr = 'Execution Time Limit Exceeded';
-				if (!isShared) {
-					worker.terminate();
-					localPyodideWorker = null;
-				}
+				// Terminate and drop the shared worker so the next execution starts fresh.
+				worker.terminate();
+				pyodideWorkerStore.set(null);
+				pyodideWorkerChatId.set('');
 			}
 		}, 60000);
 
@@ -428,13 +431,6 @@
 	onMount(async () => {
 		if (token) {
 			onUpdate(token);
-		}
-	});
-
-	onDestroy(() => {
-		if (localPyodideWorker) {
-			localPyodideWorker.terminate();
-			localPyodideWorker = null;
 		}
 	});
 </script>

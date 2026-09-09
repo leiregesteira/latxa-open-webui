@@ -37,6 +37,21 @@
 	$: if (show) {
 		init();
 	}
+
+	// Some messages (e.g. multi-model comparisons) store their text under
+	// output[].content[].text or originalContent instead of the flat
+	// content field, which is left empty in that case.
+	const getMessageText = (message) => {
+		if (!message) return '-';
+		if (message.content) return message.content;
+		if (message.originalContent) return message.originalContent;
+		for (const item of message.output ?? []) {
+			for (const part of item.content ?? []) {
+				if (part.type === 'output_text' && part.text) return part.text;
+			}
+		}
+		return '-';
+	};
 </script>
 
 <Modal size="sm" bind:show>
@@ -77,7 +92,7 @@
 									<div class="mb-1 text-xs text-gray-500">{$i18n.t('Prompt')}</div>
 
 									<div class="flex-1 text-xs whitespace-pre-line break-words">
-										<span>{messages[messages[messageId]?.parentId]?.content || '-'}</span>
+										<span>{getMessageText(messages[messages[messageId]?.parentId])}</span>
 									</div>
 								</div>
 							{/if}
@@ -88,7 +103,7 @@
 									<div
 										class="flex-1 text-xs whitespace-pre-line break-words max-h-32 overflow-y-auto"
 									>
-										<span>{messages[messageId]?.content || '-'}</span>
+										<span>{getMessageText(messages[messageId])}</span>
 									</div>
 								</div>
 							{/if}

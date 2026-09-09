@@ -37,6 +37,8 @@
 		showFileNavPath,
 		showFileNavDir,
 		pyodideWorker,
+
+		pyodideWorkerChatId,
 		desktopEvent
 	} from '$lib/stores';
 	import { getFileContentById } from '$lib/apis/files';
@@ -239,14 +241,21 @@
 	};
 
 	/**
-	 * Get or create the persistent Pyodide worker.
-	 * The worker persists across executions so the virtual FS (IDBFS) is preserved.
+	 * Get or create the persistent Pyodide worker for the active chat.
+	 * The worker persists across executions so the virtual FS (IDBFS) is preserved,
+	 * but is torn down and recreated when the active chat changes so state from one
+	 * conversation doesn't leak into another.
 	 */
 	const getOrCreateWorker = () => {
 		let worker = $pyodideWorker;
+		if (worker && $pyodideWorkerChatId !== $chatId) {
+			worker.terminate();
+			worker = null;
+		}
 		if (!worker) {
 			worker = createPyodideWorker();
 			pyodideWorker.set(worker);
+			pyodideWorkerChatId.set($chatId);
 		}
 		return worker;
 	};
@@ -311,6 +320,7 @@
 				// Terminate and recreate the worker on timeout
 				worker.terminate();
 				pyodideWorker.set(null);
+				pyodideWorkerChatId.set('');
 
 				if (cb) {
 					cb(

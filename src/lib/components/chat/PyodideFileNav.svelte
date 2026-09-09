@@ -4,7 +4,7 @@
 
 <script lang="ts">
 	import { getContext, onMount, onDestroy, tick } from 'svelte';
-	import { pyodideWorker } from '$lib/stores';
+	import { pyodideWorker, pyodideWorkerChatId, chatId } from '$lib/stores';
 	import { createPyodideWorker } from '$lib/pyodide/createPyodideWorker';
 	import type { FileEntry } from '$lib/apis/terminal';
 
@@ -99,9 +99,14 @@
 
 	function ensureWorker(): Worker {
 		let worker = $pyodideWorker;
+		if (worker && $pyodideWorkerChatId !== $chatId) {
+			worker.terminate();
+			worker = null;
+		}
 		if (!worker) {
 			worker = createPyodideWorker();
 			pyodideWorker.set(worker);
+			pyodideWorkerChatId.set($chatId);
 		}
 		return worker;
 	}

@@ -157,6 +157,14 @@ ${htmlContent}
 		show = false;
 	};
 
+	// Table cell text (unlike paragraphs/lists) is used raw rather than walked through
+	// inlineToSegments/inlineToRuns, so leftover **bold**/`code` markers must be stripped
+	// manually for the PDF and XLSX exporters. A cell fully wrapped in ** (the common
+	// "bold label" case) is rendered bold; partial inline bold within a cell is unwrapped.
+	const stripInlineMarkdown = (text: string) =>
+		text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/`(.+?)`/g, '$1');
+	const isFullyBoldCell = (text: string) => /^\*\*[\s\S]+\*\*$/.test(text.trim());
+
 	// marked HTML-escapes leaf inline tokens (" -> &quot;, ' -> &#39;, etc.) since its normal
 	// output target is HTML. Decode those entities back to literal characters.
 	const decodeEntities = (str: string): string => {
@@ -337,8 +345,8 @@ ${htmlContent}
 							usableWidth - indent - bulletWidth,
 							baseFontSize
 						);
+						y += baseFontSize * 0.5;
 					});
-					y += baseFontSize * 0.5;
 				} else if (token.type === 'blockquote') {
 					renderTokens(token.tokens ?? [], indent + 6);
 				} else if (token.type === 'table') {
@@ -349,15 +357,30 @@ ${htmlContent}
 					const colCount = Math.max(header.length, 1);
 					const colWidth = (usableWidth - indent) / colCount;
 
-					const renderRow = (cells: string[], bold: boolean) => {
-						ensureSpace(baseFontSize * 0.5);
-						doc.setFont('helvetica', bold ? 'bold' : 'normal');
+					const rowLineHeight = baseFontSize * 0.5;
+
+					const renderRow = (cells: string[], headerBold: boolean) => {
 						doc.setFontSize(baseFontSize);
-						cells.forEach((cellText, colIdx) => {
-							const cellLines = doc.splitTextToSize(cellText, colWidth - 4);
-							doc.text(cellLines[0] ?? '', left + indent + colIdx * colWidth, y);
+						const prepared = cells.map((raw) => {
+							const trimmed = raw.trim();
+							const isBold = headerBold || isFullyBoldCell(trimmed);
+							return { text: stripInlineMarkdown(trimmed), isBold };
 						});
-						y += baseFontSize * 0.5;
+						const wrappedCells = prepared.map(({ text, isBold }) => {
+							doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+							return { lines: doc.splitTextToSize(text, colWidth - 4), isBold };
+						});
+						const lineCount = Math.max(1, ...wrappedCells.map(({ lines }) => lines.length));
+						ensureSpace(lineCount * rowLineHeight);
+						for (let lineIdx = 0; lineIdx < lineCount; lineIdx++) {
+							wrappedCells.forEach(({ lines, isBold }, colIdx) => {
+								if (lines[lineIdx]) {
+									doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+									doc.text(lines[lineIdx], left + indent + colIdx * colWidth, y + lineIdx * rowLineHeight);
+								}
+							});
+						}
+						y += lineCount * rowLineHeight;
 					};
 
 					renderRow(header, true);
@@ -565,8 +588,10 @@ ${htmlContent}
 		const workbook = new ExcelJS.Workbook();
 
 		tables.forEach((table, idx) => {
-			const header = (table.header ?? []).map((cell: any) => cell.text ?? '');
-			const rows = (table.rows ?? []).map((row: any[]) => row.map((cell: any) => cell.text ?? ''));
+			const header = (table.header ?? []).map((cell: any) => stripInlineMarkdown((cell.text ?? '').trim()));
+			const rows = (table.rows ?? []).map((row: any[]) =>
+				row.map((cell: any) => (cell.text ?? '').trim())
+			);
 			const worksheet = workbook.addWorksheet(`Tabla ${idx + 1}`);
 
 			if (header.length > 0) {
@@ -575,7 +600,14 @@ ${htmlContent}
 					cell.font = { bold: true };
 				});
 			}
-			rows.forEach((row) => worksheet.addRow(row));
+			rows.forEach((row) => {
+				const dataRow = worksheet.addRow(row.map((cellText) => stripInlineMarkdown(cellText)));
+				row.forEach((cellText, colIdx) => {
+					if (isFullyBoldCell(cellText)) {
+						dataRow.getCell(colIdx + 1).font = { bold: true };
+					}
+				});
+			});
 
 			worksheet.columns.forEach((column) => {
 				let maxLength = 10;

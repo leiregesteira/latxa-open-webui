@@ -550,14 +550,14 @@
 						</h3>
 						<p class="mb-2">
 							{$i18n.t(
-								'By clicking the call icon, you can talk to the model by voice: your speech will be transcribed and the answer will be read aloud to you.'
+								'By clicking the call icon, you can talk to the model by voice: your speech will be transcribed and the answer will be read aloud to you. Voice transcription in Basque is not reliable yet, so for now this works better in Spanish or English.'
 							)}
 						</p>
 						<div
 							class="rounded-lg bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 px-2.5 py-1.5 text-xs"
 						>
 							<span class="font-medium">{$i18n.t('Try it:')}</span>
-							{$i18n.t('Click the call icon and say "Kaixo, zer moduz zaude?" out loud.')}
+							{$i18n.t('Click the call icon and say "How is the weather today?" out loud, in Spanish or English.')}
 						</div>
 					</div>
 
@@ -578,14 +578,6 @@
 						</div>
 					</div>
 				</div>
-			</section>
-
-			<section>
-				<h3 class="font-semibold mb-1">{$i18n.t('Need help?')}</h3>
-				<p>
-					{$i18n.t('If you run into any issues or have suggestions, please contact us:')}
-					<a href="mailto:latxa.hitz@ehu.eus" class="underline">latxa.hitz@ehu.eus</a>
-				</p>
 			</section>
 		</div>
 	</div>

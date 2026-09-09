@@ -1758,15 +1758,6 @@ async def chat_image_generation_handler(request: Request, form_data: dict, extra
     return form_data
 
 
-def get_files_from_messages(message_list):
-    files = []
-    for message in reversed(message_list):
-        for file in message.get('files', []):
-            if file.get('type') == 'file' and file.get('url'):
-                files.append(file)
-    return files
-
-
 async def chat_document_translation_handler(request: Request, form_data: dict, extra_params: dict, user):
     """
     Legacy function-calling doesn't offer the model a `translate_document` tool
@@ -1796,7 +1787,18 @@ async def chat_document_translation_handler(request: Request, form_data: dict, e
 
     user_message = get_last_user_message(message_list)
 
-    attached_files = get_files_from_messages(message_list)
+    # Only translate documents attached to the current message -- scanning the
+    # whole chat history would drag in documents from earlier, unrelated
+    # messages in the same conversation.
+    current_message = next(
+        (m for m in reversed(message_list) if m.get('role') == 'user' and m.get('files')),
+        None,
+    )
+    attached_files = [
+        file
+        for file in (current_message.get('files', []) if current_message else [])
+        if file.get('type') == 'file' and file.get('url')
+    ]
     translatable = []
     for file in attached_files:
         extension = os.path.splitext(file.get('name', ''))[1][1:].lower()
@@ -2600,9 +2602,24 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         if 'code_interpreter' in features and features['code_interpreter']:
             engine = await Config.get('code_interpreter.engine', 'pyodide')
 
+            model_capabilities = model.get('info', {}).get('meta', {}).get('capabilities') or {}
+            builtin_tools_meta = model.get('info', {}).get('meta', {}).get('builtinTools', {})
+            code_interpreter_will_execute = (
+                builtin_tools_meta.get('code_interpreter', True)
+                and model_capabilities.get('code_interpreter', True)
+                and (
+                    getattr(user, 'role', None) == 'admin'
+                    or await has_permission(
+                        getattr(user, 'id', ''),
+                        'features.code_interpreter',
+                        await Config.get('user.permissions'),
+                    )
+                )
+            )
+
             # Skip XML-tag prompt injection when native FC is enabled —
             # execute_code will be injected as a builtin tool instead
-            if metadata.get('params', {}).get('function_calling') == 'legacy':
+            if metadata.get('params', {}).get('function_calling') == 'legacy' and code_interpreter_will_execute:
                 prompt = (
                     await Config.get('code_interpreter.prompt_template')
                     if await Config.get('code_interpreter.prompt_template') != ''
